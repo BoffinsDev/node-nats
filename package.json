@@ -43,8 +43,7 @@
     "node": ">= 0.10.x"
   },
   "dependencies": {
-    "events": "^1.0.2",
-    "worker-loader": "^0.6.0"
+    "events": "^1.0.2"
   },
   "devDependencies": {
     "jshint": "2.8.x",
