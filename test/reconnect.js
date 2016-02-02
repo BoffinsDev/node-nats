@@ -79,6 +79,41 @@ describe('Reconnect functionality', function() {
     });
   });
 
+  it('should emit reconnecting events indefinitely if maxReconnectAttempts is set to -1', function(done) {
+
+    var nc = NATS.connect({'port':PORT, 'reconnectTimeWait':WAIT, 'maxReconnectAttempts':-1});
+    var numAttempts = 0;
+
+    // stop trying after an arbitrary amount of elapsed time
+    var timeout = setTimeout(function() {
+      // restart server and make sure next flush works ok
+      if (server === null) {
+        server = nsc.start_server(PORT);
+      }
+    }, 1000);
+
+    nc.on('connect', function() {
+      server.kill();
+      server = null;
+    });
+    nc.on('reconnecting', function(/*client*/) {
+      numAttempts += 1;
+      // attempt indefinitely to reconnect
+      nc.reconnects.should.equal(numAttempts);
+      nc.connected.should.equal(false);
+      nc.wasConnected.should.equal(true);
+      nc.reconnecting.should.equal(true);
+      // if maxReconnectAttempts is set to -1, the number of reconnects will always be greater
+      nc.reconnects.should.be.above(nc.options.maxReconnectAttempts);
+    });
+    nc.on('reconnect', function() {
+      nc.flush(function() {
+        nc.close();
+        done();
+      });
+    });
+  });
+
   it('should succesfully reconnect to new server', function(done) {
     var nc = NATS.connect({'port':PORT, 'reconnectTimeWait':100});
     // Kill server after first successful contact
@@ -175,4 +210,93 @@ describe('Reconnect functionality', function() {
     });
   });
 
+  it('should not crash when sending a publish with a callback after connection loss', function(done) {
+    var nc = NATS.connect({'port':PORT, 'reconnectTimeWait':WAIT});
+    var startTime;
+    should.exist(nc);
+    nc.on('connect', function() {
+      server.kill();
+      startTime = new Date();
+    });
+    nc.on('disconnect', function() {
+      nc.publish('foo', 'bar', 'reply', function() {
+         // fails to get here, but should not crash
+      });
+      server = nsc.start_server(PORT);
+    });
+    nc.on('reconnect', function() {
+      nc.flush(function() {
+	nc.close();
+	done();
+      });
+    });
+  });
+
+  it('should execute callbacks if published during reconnect', function(done) {
+    var nc = NATS.connect({'port':PORT, 'reconnectTimeWait':100});
+    nc.on('reconnecting', function(/*client*/) {
+      // restart server
+      if (server === null) {
+        nc.publish('foo', function() {
+          nc.close();
+          done();
+        });
+        server = nsc.start_server(PORT);
+      }
+    });
+    nc.on('connect', function() {
+      var s = server;
+      server = null;
+      s.kill();
+    });
+  });
+
+  it('should not lose messages if published during reconnect', function(done) {
+    // This checks two things if the client publishes while reconnecting:
+    // 1) the message is published when the client reconnects
+    // 2) the client's subscriptions are synced before the message is published
+    var nc = NATS.connect({'port':PORT, 'reconnectTimeWait':100});
+    nc.subscribe('foo', function() {
+      nc.close();
+      done();
+    });
+    nc.on('reconnecting', function(/*client*/) {
+      // restart server
+      if (server === null) {
+        nc.publish('foo');
+        server = nsc.start_server(PORT);
+      }
+    });
+    nc.on('connect', function() {
+      var s = server;
+      server = null;
+      s.kill();
+    });
+  });
+
+  it('should emit reconnect before flush callbacks are called', function(done) {
+    var nc = NATS.connect({'port':PORT, 'reconnectTimeWait':100});
+    var reconnected = false;
+    nc.on('reconnecting', function() {
+      // restart server
+      if (server === null) {
+        nc.flush(function() {
+          nc.close();
+          if (!reconnected) {
+            done(new Error('Flush callback called before reconnect emitted'));
+          }
+          done();
+        });
+        server = nsc.start_server(PORT);
+      }
+    });
+    nc.on('reconnect', function() {
+      reconnected = true;
+    });
+    nc.on('connect', function() {
+      var s = server;
+      server = null;
+      s.kill();
+    });
+  });
 });

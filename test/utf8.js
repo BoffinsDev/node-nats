@@ -8,7 +8,7 @@ var NATS = require ('../'),
 
 describe('UTF8', function() {
 
-  var PORT = 1429;
+  var PORT = 1430;
   var server;
 
   // Start up our own nats-server
@@ -53,6 +53,7 @@ describe('UTF8', function() {
 
     nc.subscribe('plain', function(msg) {
       msg.should.equal(plain_data);
+      nc.close();
       done();
     });
 

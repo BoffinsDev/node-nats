@@ -29,8 +29,14 @@ nats.subscribe('foo', function(msg) {
 var sid = nats.subscribe('foo', function(msg) {});
 nats.unsubscribe(sid);
 
-// Requests
-nats.request('help', function(response) {
+// Request Streams
+var sid = nats.request('request', function(response) {
+  console.log('Got a response in msg stream: ' + response);
+});
+
+// Request with Auto-Unsubscribe. Will unsubscribe after
+// the first response is received via {'max':1}
+nats.request('help', null, {'max':1}, function(response) {
   console.log('Got a response for help: ' + response);
 });
 
@@ -42,7 +48,6 @@ nats.subscribe('help', function(request, replyTo) {
 // Close connection
 nats.close();
 
-end
 ```
 
 ## Wildcard Subscriptions
@@ -96,6 +101,38 @@ console.log("Connected to " + nc.currentServer.host);
 nc = nats.connect({'dontRandomize': true, 'servers':servers});
 
 ```
+## TLS
+
+```javascript
+var nats = require('nats');
+var fs = require('fs');
+
+// Simple TLS connect
+var nc = nats.connect({port: TLSPORT, tls: true});
+
+// Overriding and not verifying the server
+var tlsOptions = {
+  rejectUnauthorized: false,
+};
+var nc = nats.connect({port: TLSPORT, tls: tlsOptions});
+// nc.stream.authorized will be false
+
+// Use a specified CA for self-signed server certificates
+var tlsOptions = {
+  ca: [ fs.readFileSync('./test/certs/ca.pem') ]
+};
+var nc = nats.connect({port: TLSPORT, tls: tlsOptions});
+// nc.stream.authorized should be true
+
+// Use a client certificate if the server requires
+var tlsOptions = {
+  key: fs.readFileSync('./test/certs/client-key.pem'),
+  cert: fs.readFileSync('./test/certs/client-cert.pem'),
+  ca: [ fs.readFileSync('./test/certs/ca.pem') ]
+};
+var nc = nats.connect({port: TLSPORT, tls: tlsOptions});
+
+```
 
 ## Advanced Usage
 
@@ -111,6 +148,12 @@ nats.publish('foo', 'You done?', function() {
 nats.flush(function() {
   console.log('All clear!');
 });
+
+// If you want to make sure NATS yields during the processing
+// of messages, you can use an option to specify a yieldTime in ms.
+// During the processing of the inbound stream, we will yield if we
+// spend more then yieldTime milliseconds processing.
+var nc = nats.connect({port: PORT, yieldTime: 10});
 
 // Timeouts for subscriptions
 var sid = nats.subscribe('foo', function() {
@@ -150,7 +193,7 @@ See examples and benchmarks for more information..
 (The MIT License)
 
 Copyright (c) 2015 Apcera Inc.<br/>
-Copyright (c) 2011-2014 Derek Collison
+Copyright (c) 2011-2015 Derek Collison
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
@@ -169,4 +212,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
-
