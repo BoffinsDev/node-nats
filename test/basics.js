@@ -198,12 +198,26 @@ describe('Basics', function() {
 
   it('should do callback after publish is flushed', function(done) {
     var nc = NATS.connect(PORT);
-    nc.publish('foo', done);
+    nc.publish('foo', function() {
+        nc.close();
+        done();
+    });
   });
 
   it('should do callback after flush', function(done) {
     var nc = NATS.connect(PORT);
-    nc.flush(done);
+    nc.flush(function() {
+      nc.close();
+      done();
+    });
+  });
+
+  it('should handle an unsubscribe after close of connection', function(done) {
+    var nc = NATS.connect(PORT);
+    var sid = nc.subscribe('foo');
+    nc.close();
+    nc.unsubscribe(sid);
+    done();
   });
 
   it('should not receive data after unsubscribe call', function(done) {
@@ -223,6 +237,18 @@ describe('Basics', function() {
       nc.close();
       done();
     });
+  });
+
+  it('should pass sid properly to a message callback if requested', function(done) {
+    var nc = NATS.connect(PORT);
+    var expected = 5;
+    var received = 0;
+    var sid = nc.subscribe('foo', function(msg, reply, subj, lsid) {
+      sid.should.equal(lsid);
+      nc.close();
+      done();
+    });
+    nc.publish('foo');
   });
 
 });
